@@ -166,6 +166,10 @@ if HAS_BAB
 cgminer_SOURCES += driver-bab.c
 endif
 
+if HAS_U8
+cgminer_SOURCES += driver-spi-u8.c u8-device.c u8-device.h 
+endif
+
 if HAS_AVALON2
 cgminer_SOURCES += driver-avalon2.c driver-avalon2.h
 endif

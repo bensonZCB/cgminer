@@ -255,6 +255,18 @@ if test "x$bab" = xyes; then
 fi
 AM_CONDITIONAL([HAS_BAB], [test x$bab = xyes])
 
+u8="no"
+
+AC_ARG_ENABLE([u8],
+	[AC_HELP_STRING([--enable-u8],[Compile support for STRONGU u8 STANDALONE(default disabled)])],
+	[u8=$enableval]
+	)
+if test "x$u8" = xyes; then
+	AC_DEFINE([USE_U8], [1], [Defined to 1 if STRONGU u8 support is wanted])
+	drivercount=x$drivercount
+	standalone="yes"
+fi
+AM_CONDITIONAL([HAS_U8], [test x$u8 = xyes])
 
 bflsc="no"
 
@@ -868,6 +880,12 @@ else
 	echo "  BlackArrow.ASICs.....: Disabled"
 fi
 
+if test "x$u8" = xyes; then
+	echo "  STRONGU.ASICs.....: Enabled"
+else
+	echo "  STRONGU.ASICs.....: Disabled"
+fi
+
 if test "x$bflsc" = xyes; then
 	echo "  BFL.ASICs............: Enabled"
 else
@@ -979,7 +997,7 @@ else
 fi
 
 #Add any new device to this, along with a no on the end of the test
-if test "x$avalon$avalon2$avalon4$avalon7$avalon8$avalon_miner$bab$bflsc$bitforce$bitfury$bitfury16$bitmain_soc$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$ants1$ants2$ants3$sp10$sp30$dragonmint_t1" = xnononononononononononononononononononononononononononono; then
+if test "x$avalon$avalon2$avalon4$avalon7$avalon8$avalon_miner$bab$u8$bflsc$bitforce$bitfury$bitfury16$bitmain_soc$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$ants1$ants2$ants3$sp10$sp30$dragonmint_t1" = xnonononononononononononononononononononononononononononono; then
 	echo
 	AC_MSG_ERROR([No mining devices configured in])
 	echo
