@@ -122,70 +122,55 @@ bool cmd_auto_address(struct spi_ctx *ctx, uint8_t chip_id)
 	return true;
 }
 
-bool cmd_write_register_0(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pllRstT, uint32_t pllChgT)
+bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
 
-	spi_tx[0] = CMD_WRITE_REG;
-	spi_tx[1] = chip_id;
-	spi_tx[2] = 0x00;
-	spi_tx[3] = 0x00;
+	uint8_t RefDiv = 4; //oscilator=20M -> RefDiv=4; oscilator=25M -> RefDiv=5;		
+	uint32_t FbDiv3 = (2*pll3)/5;
+	uint32_t FbDiv2 = (2*pll2)/5;
+	uint32_t FbDiv1 = (2*pll1)/5;
+	uint32_t FbDiv0 = (2*pll0)/5;
 
-	memcpy(spi_tx+4, pllRstT, 4);
-	memcpy(spi_tx+8, pllChgT, 4);
-
-	swap_data(spi_tx, 12);
-	crc = CRC16(spi_tx, 12);
-	
-	spi_tx[12] = (uint8_t)((crc >> 0) & 0xff);
-	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
-
-	spi_send_data(ctx, spi_tx, 14);
-	
-}
-
-bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t *pllx)
-{
-	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
-	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
-	uint16_t crc;
-	uint8_t bankVal[16] = {0x3e, 0x92, 0x81, 0x00, 0x3e, 0x92, 0x81, 0x00,
-							0x3e, 0x92, 0x81, 0x00,0x3e, 0x92, 0x81, 0x00};
+	uint8_t regpll3[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll2[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll1[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll0[4]={0x02, 0x08, 0x22, 0x1f};
 
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x01;
-	
-	if (NULL != pllx)
-	{
-		applog(LOG_ERR, "pll0~3:%d %d %d %d", pllx[0], pllx[1], pllx[2], pllx[3]);
-		//pll0
-		bankVal[0] = *((uint8_t*)(pllx+0));
-		bankVal[1] = *((uint8_t*)(pllx+0)+1);
-		bankVal[2] = *((uint8_t*)(pllx+0)+2);
-		bankVal[3] = *((uint8_t*)(pllx+0)+3);
-		//pll1
-		bankVal[4] = *((uint8_t*)(pllx+1));
-		bankVal[5] = *((uint8_t*)(pllx+1)+1);
-		bankVal[6] = *((uint8_t*)(pllx+1)+2);
-		bankVal[7] = *((uint8_t*)(pllx+1)+3);
-		//pll2
-		bankVal[8] = *((uint8_t*)(pllx+2));
-		bankVal[9] = *((uint8_t*)(pllx+2)+1);
-		bankVal[10] = *((uint8_t*)(pllx+2)+2);
-		bankVal[11] = *((uint8_t*)(pllx+2)+3);
-		//pll3
-		bankVal[12] = *((uint8_t*)(pllx+3));
-		bankVal[13] = *((uint8_t*)(pllx+3)+1);
-		bankVal[14] = *((uint8_t*)(pllx+3)+2);
-		bankVal[15] = *((uint8_t*)(pllx+3)+3);
-		
-	}
 
-	memcpy(spi_tx+4, bankVal, 16);
+	/************step1 set pll bit************/
+	//pll3
+	uint8_t Fb_h8bit = (FbDiv3>>4)&0xff;
+	uint8_t Fb_l4bit = FbDiv3 &0x0f;
+	regpll3[1] = Fb_h8bit;
+	regpll3[2] = (regpll3[2]&0x0f)|(Fb_l4bit<<4);
+	//pll2
+	Fb_h8bit = (FbDiv2>>4)&0xff;
+	Fb_l4bit = FbDiv2 &0x0f;
+	regpll2[1] = Fb_h8bit;
+	regpll2[2] = (regpll2[2]&0x0f)|(Fb_l4bit<<4);
+	//pll1
+	Fb_h8bit = (FbDiv1>>4)&0xff;
+	Fb_l4bit = FbDiv1 &0x0f;
+	regpll1[1] = Fb_h8bit;
+	regpll1[2] = (regpll1[2]&0x0f)|(Fb_l4bit<<4);
+	//pll0
+	Fb_h8bit = (FbDiv0>>4)&0xff;
+	Fb_l4bit = FbDiv0 &0x0f;
+	regpll0[1] = Fb_h8bit;
+	regpll0[2] = (regpll0[2]&0x0f)|(Fb_l4bit<<4);
+
+	memcpy(spi_tx+4, regpll3, 4);
+	memcpy(spi_tx+8, regpll2, 4);
+	memcpy(spi_tx+16, regpll1, 4);
+	memcpy(spi_tx+24, regpll0, 4);
+
 
 	swap_data(spi_tx, 20);
 	crc = CRC16(spi_tx, 20);
@@ -194,21 +179,114 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t *pllx)
 	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 22);
+	flush_spi(ctx);
 	
+	/***********step 2 set power down bit***********/
+	regpll3[3] &= 0xf9;
+	regpll3[2] &= 0xf9;
+	regpll3[1] &= 0xf9;
+	regpll3[0] &= 0xf9;
+
+	memcpy(spi_tx+4, regpll3, 4);
+	memcpy(spi_tx+8, regpll2, 4);
+	memcpy(spi_tx+16, regpll1, 4);
+	memcpy(spi_tx+24, regpll0, 4);
+
+
+	swap_data(spi_tx, 20);
+	crc = CRC16(spi_tx, 20);
+
+	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
+	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
+
+	spi_send_data(ctx, spi_tx, 22);
+	flush_spi(ctx);
+
+	/***********step 3 set pll gate bit*************/
+	regpll3[0] |= 0x80;
+	regpll2[0] |= 0x80;
+	regpll1[0] |= 0x80;
+	regpll0[0] |= 0x80;
+	
+	memcpy(spi_tx+4, regpll3, 4);
+	memcpy(spi_tx+8, regpll2, 4);
+	memcpy(spi_tx+16, regpll1, 4);
+	memcpy(spi_tx+24, regpll0, 4);
+
+
+	swap_data(spi_tx, 20);
+	crc = CRC16(spi_tx, 20);
+
+	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
+	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
+
+	spi_send_data(ctx, spi_tx, 22);	
 }
 
-bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id)
+bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, uint8_t spdVid, uint8_t glbSpd)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
-	uint8_t bankVal[16] = {0x00, 0x00, 0x00,0x30,0x00,0x01,0x00,0xa0, 0x80, 0x00, 0x00, 0x7c, 0x00, 0x00,0x00, 0x00};
+	uint8_t bankVal[16] = {0x38, 0x00, 0x00, 0x30, 0x00, 0x01, 0x00, 0x0a, 0x80, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+	spdEn &= 0x01;
+	spdVid &= 0x01;
+	glbSpd &= 0x03; 
+	uint8_t glbHigh = 3;
+	uint8_t glbLow = 0;
+
+	uint16_t spdThPass = 1;
+	uint16_t spdThFail = 10;
+	uint16_t spdThInit = 32768;
+
+	//speed dirtection(up/down) when time out, 1->up, 0->down
+	uint8_t spdDirectcion = 0;
+	// speed value when time out
+	uint16_t spdTOutVal = 1024;
+	// speed timer, 0-> disable
+	uint32_t spdThTmout = 0;
+	
 
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x02;
 
+	//speed enable
+	bankVal[1]  = (bankVal[1] &0xfe)|spdEn;
+	//spdVId, speed write protect
+	bankVal[2] = (bankVal[2]&0xef)|(spdVid<<4);
+	//set global speed
+	bankVal[2] = (bankVal[2]&0xf0)|glbSpd;
+
+	//global speed upper limit
+	bankVal[3] = (bankVal[3]&0x0f)|(glbHigh<<4);
+	//global speed lower limit
+	bankVal[3] = (bankVal[3]&0xf0)|glbLow;
+
+	//speed upstream step
+	bankVal[4] = (spdThPass>>8)&0xff;
+	bankVal[5] = spdThPass&0xff;
+	//speed downstream step
+	bankVal[6] = (spdThFail>>8)&0xff;
+	bankVal[7] = spdThFail&0xff;
+	//speed init value
+	bankVal[8] = (spdThInit>>8)&0xff;
+	bankVal[9] = spdThInit&0xff;
+
+	//speed dirtection(up/down) when time out
+	spdDirectcion &= 0x01;
+	bankVal[10] = (bankVal[10]&0x7f)|(spdDirectcion<<7);
+	//speed value when time out
+	bankVal[10] = (bankVal[10]&0x80)|(spdTOutVal>>8);
+	bankVal[11] = spdTOutVal&0xff;
+	// speed timer
+	bankVal[12] = (spdThTmout>>24)&0xff;
+	bankVal[13] = (spdThTmout>>16)&0xff;
+	bankVal[14] = (spdThTmout>>8)&0xff;
+	bankVal[15] = (spdThTmout>>0)&0xff;
+
 	memcpy(spi_tx+4, bankVal, 16);
 
 	swap_data(spi_tx, 20);
@@ -220,17 +298,32 @@ bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_send_data(ctx, spi_tx, 22);
 }
 
-bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id)
+bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
 	uint8_t bankVal[8]={0x10, 0x0f, 0xa0, 0x00, 0x00, 0x00,0x00, 0x64};
 
+	uint8_t RollTimeEn = 1;
+	uint32_t RollTimeVal = 100;
+
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x03;
+
+	crcEn &= 0x01;
+	bankVal[0] = (bankVal[0]&0x0f)|(crcEn<<4);
+
+	RollTimeEn &=0x01;
+	bankVal[3] = (bankVal[3]&0x01)|RollTimeEn;
+
+	RollTimeVal &= 0x00ffffff;
+	bankVal[5] = (RollTimeVal>>16);
+	bankVal[6] = (RollTimeVal>>8);
+	bankVal[7] = (RollTimeVal>>0);
+	
 
 	memcpy(spi_tx+4, bankVal, 8);
 
@@ -243,6 +336,7 @@ bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_send_data(ctx, spi_tx, 14);
 }
 
+//TODO
 bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
@@ -424,6 +518,85 @@ bool cmd_read_register(struct spi_ctx *ctx, uint8_t chip_id, uint8_t regAddr, ui
 	return true;
 }
 
+void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3)
+{
+	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
+	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
+	uint16_t crc;
+
+	uint8_t RefDiv = 4; //oscilator=20M -> RefDiv=4; oscilator=25M -> RefDiv=5;		
+	uint32_t FbDiv3 = (2*pll3)/5;
+	uint32_t FbDiv2 = (2*pll2)/5;
+	uint32_t FbDiv1 = (2*pll1)/5;
+	uint32_t FbDiv0 = (2*pll0)/5;
+
+	uint8_t regpll3[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll2[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll1[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll0[4]={0x02, 0x08, 0x22, 0x1f};
+
+	spi_tx[0] = CMD_WRITE_REG;
+	spi_tx[1] = chip_id;
+	spi_tx[2] = 0x00;
+	spi_tx[3] = 0x01;
+
+	/************step1 set pll bit************/
+	//pll3
+	uint8_t Fb_h8bit = (FbDiv3>>4)&0xff;
+	uint8_t Fb_l4bit = FbDiv3 &0x0f;
+	regpll3[1] = Fb_h8bit;
+	regpll3[2] = (regpll3[2]&0x0f)|(Fb_l4bit<<4);
+	//pll2
+	 Fb_h8bit = (FbDiv2>>4)&0xff;
+	 Fb_l4bit = FbDiv2 &0x0f;
+	regpll2[1] = Fb_h8bit;
+	regpll2[2] = (regpll2[2]&0x0f)|(Fb_l4bit<<4);
+	//pll1
+	 Fb_h8bit = (FbDiv1>>4)&0xff;
+	 Fb_l4bit = FbDiv1 &0x0f;
+	regpll1[1] = Fb_h8bit;
+	regpll1[2] = (regpll1[2]&0x0f)|(Fb_l4bit<<4);
+	//pll0
+	 Fb_h8bit = (FbDiv0>>4)&0xff;
+	 Fb_l4bit = FbDiv0 &0x0f;
+	regpll0[1] = Fb_h8bit;
+	regpll0[2] = (regpll0[2]&0x0f)|(Fb_l4bit<<4);
+	
+	/***********step 2 set power down bit***********/
+	regpll3[3] &= 0xf9;
+	regpll3[2] &= 0xf9;
+	regpll3[1] &= 0xf9;
+	regpll3[0] &= 0xf9;
+
+	/***********step 3 set pll gate bit*************/
+	regpll3[0] |= 0x80;
+	regpll2[0] |= 0x80;
+	regpll1[0] |= 0x80;
+	regpll0[0] |= 0x80;
+	
+	memcpy(spi_tx+4, regpll3, 4);
+	memcpy(spi_tx+8, regpll2, 4);
+	memcpy(spi_tx+16, regpll1, 4);
+	memcpy(spi_tx+24, regpll0, 4);
+
+
+	swap_data(spi_tx, 20);
+	crc = CRC16(spi_tx, 20);
+
+	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
+	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
+
+	spi_send_data(ctx, spi_tx, 22);	
+}
+
+void config_hash_board(struct u8_chain *achain)
+{
+	struct spi_ctx *ctx  = achain->spi_ctx;
+	int i, j;
+	uint8_t pHtarget[8]={0};
+}
+
+
 /*****************************************************/
 
 int SPI_PIN_POWER_EN[4] = {
@@ -530,7 +703,6 @@ bool stu_gpio_init(int chain_id)
 {
 	asic_gpio_init(SPI_PIN_POWER_EN[chain_id], 0); //0 --> ouput
 	asic_gpio_init(SPI_PIN_RESET[chain_id], 0);
-	printf("~~~~~~~~~~~~~~~~~~~~~~\n");
 }
 
 bool stu_board_powerOnOf(int chain_id, uint8_t val)

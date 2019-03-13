@@ -39,8 +39,65 @@ static struct work *wq_dequeue(struct work_queue *wq)
 	return work;
 }
 
-struct stu_chain *init_u1000_chain(struct spi_ctx *ctx, int chain_id)
+struct u8_chain *init_u8_chain(struct spi_ctx *ctx, int chain_id)
 {
+	uint8_t devname[64]={0};
+	char *p;
+	int n;
+	int loop;
+	bool ret = false;
+	struct u8_chain *achain =  calloc(1, sizeof(*achain));
+
+	sprintf(devname, SPI_DEVICE_TEMPLATE, ctx->config.bus, ctx->config.cs_line);
+	achain->chain_id = ctx->config.bus;
+	achain->spi_ctx = ctx;
+	achain->devname = strdup(devname);
+	achain->spi_ctx->devname = strdup(devname);
+	achain->num_chips = ASIC_CHIP_NUM;
+	achain->num_active_chips = ASIC_CHIP_NUM;
+	achain->set_job_cnt = 0;
+	achain->chips = calloc(achain->num_active_chips, sizeof(struct u8_chip));
+	//achain->need_wtlevel = true;
+	//achain->read_chipid = 1;
+
+	for(loop = 0; loop < 3; loop++)
+	{
+		applog(LOG_ERR, "start cmd_auto_address... loop: %d", loop);
+
+		ret = cmd_auto_address(ctx, ADDR_BROADCAST);
+
+		if(true == ret)
+		{
+			break;
+		}
+		else
+		{
+			cgsleep_ms(500);
+		}
+	}
+
+#if 0
+	if (!ret)
+	{
+		if ( !cmd_detect_chip2(ctx))
+		{
+			applog(LOG_ERR, "%s cmd_auto_address fail ! loop: %d", devname, loop);
+			goto FAIL;
+		}
+	}
+	applog(LOG_ERR, "cmd_auto_address finished... loop%d", loop);
+#endif	
+		
+	mutex_init(&achain->lock);
+	INIT_LIST_HEAD(&achain->active_wq.head);
+
+	return achain;
+
+FAIL:	
+	free(achain->chips);
+	free(achain->devname);
+	free(achain);
+	return NULL;
 
 }
 	
@@ -74,11 +131,11 @@ void u8_detect_chain(bool hotplug)
 			continue;
 		u8_dev_init(spi[i]->config.bus);
 		cgsleep_ms(2);
-		chain[i] = init_u1000_chain(spi[i], i);
+		chain[i] = init_u8_chain(spi[i], i);
 
 		if (!chain[i])
 		{
-			applog(LOG_ERR, "init u1000 chain fail");
+			applog(LOG_ERR, "init u8 chain fail");
 			Set_Led_OnOf(spi[i]->config.bus, LED_DISABLE);
 			continue;
 		}
@@ -88,7 +145,7 @@ void u8_detect_chain(bool hotplug)
 
 		memset(cgpu, 0, sizeof(*cgpu));
 		cgpu->drv = &u8_drv;
-		cgpu->name = "u1000.SingleChain";
+		cgpu->name = "u8.SingleChain";
 		cgpu->threads = 1;
 		cgpu->device_id =  chain[i]->chain_id;
 
@@ -111,12 +168,37 @@ static int64_t u8_scanwork(struct thr_info *thr)
 
 static bool u8_queue_full(struct cgpu_info *cgpu)
 {
-	return true;
+	struct u8_chain *achain = cgpu->device_data;
+	int queue_full = false;
+
+	mutex_lock(&achain->lock);
+
+	if (achain->active_wq.num_elems >=  achain->num_active_chips)
+		queue_full = true;
+	else
+		wq_enqueue(&achain->active_wq, get_queued(cgpu));
+
+	mutex_unlock(&achain->lock);
+
+	return queue_full;
 }
 
 static void u8_flush_work(struct cgpu_info *cgpu)
 {
+	struct u8_chain *achain = cgpu->device_data;
 
+	mutex_lock(&achain->lock);
+
+	while (achain->active_wq.num_elems > 0) 
+	{
+		struct work *work = wq_dequeue(&achain->active_wq);
+		assert(work != NULL);
+		work_completed(cgpu, work);
+	}
+
+	mutex_unlock(&achain->lock);
+
+	achain->need_flush_job = true;
 }
 
 struct device_drv u8_drv = {	
@@ -128,6 +210,5 @@ struct device_drv u8_drv = {
 	.hash_work = hash_queued_work, 
 	.scanwork = u8_scanwork,
 	.queue_full = u8_queue_full,
-	//.flush_work = u8_flush_work,
 	.update_work = u8_flush_work,
 };

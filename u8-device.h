@@ -58,6 +58,8 @@ struct u8_chain
 {
 	int fd;
 	int hw_errors;
+	char *devname;
+	uint32_t  set_job_cnt;
 	int stales;
 	int nonces_found;
 	int nonce_ranges_done;
@@ -70,6 +72,8 @@ struct u8_chain
 	
 	uint32_t current_HTarget7;
 	uint32_t current_HTarget6;
+
+	pthread_mutex_t lock;
 	
 	struct u8_chip *chips;
 	struct spi_ctx *spi_ctx;
@@ -149,10 +153,9 @@ extern int SPI_PIN_RESET[4];
 extern void swap_data(uint8_t *data, int len);
 extern bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t *buff, int len);
 extern bool cmd_auto_address(struct spi_ctx *ctx, uint8_t chip_id);
-extern bool cmd_write_register_0(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pllRstT, uint32_t pllChgT);
-extern bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t *pllx);
-extern bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id);
-extern bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id);
+extern bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3);
+extern bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, uint8_t spdVid, uint8_t glbSpd);
+extern bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn);
 extern bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id);
 extern bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id);
 extern bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id);

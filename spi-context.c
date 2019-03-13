@@ -21,7 +21,7 @@
 
 struct spi_ctx *spi_init(struct spi_config *config)
 {
-	char dev_fname[PATH_MAX];
+	char dev_fname[128];
 	struct spi_ctx *ctx;
 
 	if (config == NULL)
