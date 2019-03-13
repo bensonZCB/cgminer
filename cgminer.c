@@ -427,15 +427,16 @@ double rolling1, rolling5, rolling15;
 double total_rolling;
 double total_mhashes_done;
 
+char g_miner_version[64] = {0};
+char g_miner_compiletime[64] = {0};
+char g_miner_type[64] = {0};
+
 #ifdef USE_BITMAIN_SOC
 char *opt_version_path = NULL;
 char displayed_hash_rate[16] = {0};
 char nonce_num10_string[NONCE_BUFF];
 char nonce_num30_string[NONCE_BUFF];
 char nonce_num60_string[NONCE_BUFF];
-char g_miner_version[256] = {0};
-char g_miner_compiletime[256] = {0};
-char g_miner_type[256] = {0};
 
 double new_total_mhashes_done;
 double new_total_secs = 1.0;

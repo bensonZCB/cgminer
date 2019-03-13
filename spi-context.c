@@ -92,3 +92,67 @@ extern bool spi_transfer(struct spi_ctx *ctx, uint8_t *txbuf,
 
 	return ret > 0;
 }
+
+bool spi_write_data(struct spi_ctx *ctx, uint8_t *txbuf, int len)
+{
+	bool ret = true;
+
+	if((len <= 0) || (txbuf == NULL))
+	{
+		applog(LOG_ERR, "SPI: write para error");
+		ret = false;
+	}
+
+	
+	if(write(ctx->fd, txbuf, len) <= 0)
+	{
+		applog(LOG_ERR, "SPI: write data error");
+		ret = false;
+	}
+	
+
+	return ret;
+}
+
+bool spi_read_data(struct spi_ctx *ctx, uint8_t *rxbuf, int len)
+{
+	bool ret = true;
+
+	if((len <= 0) || (rxbuf == NULL))
+	{
+		applog(LOG_ERR, "SPI: read para error");
+		ret = false;
+	}
+
+	if(read(ctx->fd, rxbuf, len) <= 0)
+	{
+		applog(LOG_ERR, "SPI: read data error");
+		ret = false;
+	}
+
+	return ret;
+}
+
+bool spi_send_data(struct spi_ctx *ctx, uint8_t *txbuf, int len)
+{
+	bool ret;
+	int index = 0;
+	uint8_t spi_tx[256];
+	uint8_t spi_rx[256];
+
+	memset(spi_tx, 0, sizeof(spi_tx));
+	memcpy(spi_tx, txbuf, len);
+	
+	do{
+		ret = spi_write_data(ctx, spi_tx + index, 2);
+		if(!ret)
+		{
+			return false;
+		}		
+		
+		index = index + 2;
+		usleep(5);
+	}while(index < len);
+	
+	return true;
+}

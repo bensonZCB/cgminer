@@ -34,6 +34,7 @@ static const struct spi_config default_spi_config = {
 
 struct spi_ctx {
 	int fd;
+	char *devname;
 	struct spi_config config;
 };
 
@@ -44,5 +45,7 @@ extern void spi_exit(struct spi_ctx *ctx);
 /* process RX/TX transfer, ensure buffers are long enough */
 extern bool spi_transfer(struct spi_ctx *ctx, uint8_t *txbuf,
 			 uint8_t *rxbuf, int len);
-
+extern bool spi_write_data(struct spi_ctx *ctx, uint8_t *txbuf, int len);
+extern bool spi_read_data(struct spi_ctx *ctx, uint8_t *rxbuf, int len);
+extern bool spi_send_data(struct spi_ctx *ctx, uint8_t *txbuf, int len);
 #endif /* SPI_CONTEXT_H */
