@@ -41,6 +41,89 @@ void swap_data(uint8_t *data, int len)
 	}
 }
 
+bool cmd_write_job(struct u8_chain *achain, uint8_t chip_id, uint8_t *job)
+{
+	bool ret = false;
+	struct spi_ctx *ctx = achain->spi_ctx;
+	uint8_t spi_tx[MAX_CMD_LENGTH];
+	uint8_t spi_rx[MAX_CMD_LENGTH];
+	uint16_t tx_crc = 0, rx_crc = 0;
+
+	memcpy(spi_tx, job, JOB_LENGTH);
+	ret = spi_write_data(ctx, spi_tx, JOB_LENGTH);
+
+	spi_poll_result(ctx, job[1], chip_id, spi_rx, 4);
+
+	rx_crc = spi_rx[3] << 8 | spi_rx[2];
+	tx_crc = spi_tx[87] << 8 | spi_tx[86];
+
+	if(rx_crc != tx_crc)
+	{
+		applog(LOG_ERR, "~~~~~crc error!~~~~%s~chip_%d~~~~", basename(achain->devname), chip_id);
+		//job_crc_err++;
+		//chip->hw_errors++;
+	}
+}
+
+bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
+{
+	int i,j;
+	int tx_len,index,ret;		
+	uint16_t clc_crc; 
+	uint16_t res_crc;
+	uint8_t spi_tx[24];
+	uint8_t spi_rx[24];
+	struct spi_ctx *ctx = achain->spi_ctx;
+
+	memset(spi_tx, 0, sizeof(spi_tx));
+	spi_tx[0] = chip_id;
+	spi_tx[1] = CMD_READ_RESULT;
+
+	//applog(LOG_ERR, "spi write:0x%02x 0x%02x", spi_tx[0], spi_tx[1]);
+	if(!spi_write_data(ctx, spi_tx, 2))
+	{
+		applog(LOG_ERR, "spi write data error");
+		return false;
+	}
+
+
+	tx_len = 4 * ASIC_CHIP_NUM +4;	//???
+	memset(spi_rx, 0, sizeof(spi_rx));
+	for(i = 0; i < tx_len; i += 2)
+	{
+		if(!spi_read_data(ctx, spi_rx, 2))		
+		{
+			return false;
+		}
+
+
+		//if(((spi_rx[1] & 0x0f) == 0x04) && (spi_rx[0] != 0))
+		if((spi_rx[1]== 0x04) && (spi_rx[0] != 0))
+		{
+			index = 0;	
+			do{
+				ret = spi_read_data(ctx, spi_rx + 2 + index, 2);
+				if(!ret)
+				{
+					return false;
+				}					
+				index = index + 2;
+			}while(index < ASIC_RESULT_LEN); // 4bytes nonce
+
+			//applog(LOG_ERR, "get nonce :0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", spi_rx[0], spi_rx[1], 
+			//	spi_rx[2], spi_rx[3], spi_rx[4], spi_rx[5], spi_rx[6], spi_rx[7]);
+			memcpy(res, spi_rx, READ_RESULT_LEN);
+			return true;
+							
+		}
+
+		//cgsleep_ms(4);
+	}
+
+	return false;
+
+}
+
 bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t *buff, int len)
 {
 	int ret1, ret2;
@@ -336,18 +419,27 @@ bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn)
 	spi_send_data(ctx, spi_tx, 14);
 }
 
-//TODO
-bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id)
+bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id, uint32_t nonceTarget)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
-	uint8_t bankVal[8]={0x00, 0x00, 0x00, 0x00, 0xc0, 0x00,0x00, 0x00};
+	uint8_t bankVal[8]={0x00, 0x00, 0x00, 0x00, 0xc0, 0x08,0x02, 0x08};
+
+	//diff for cores (number of zeros)
+	uint8_t cfgMask = 0;
 
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x04;
+
+	spi_tx[3] = cfgMask;
+
+	bankVal[0] = (nonceTarget>>24);
+	bankVal[1] = (nonceTarget>>16);
+	bankVal[2] = (nonceTarget>>8);
+	bankVal[3] = (nonceTarget>>0);
 
 	memcpy(spi_tx+4, bankVal, 8);
 
@@ -361,7 +453,7 @@ bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id)
 }
 
 
-bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id)
+bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spi_div)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
@@ -373,6 +465,10 @@ bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x05;
 
+	spi_div &=0x0f;
+
+	bankVal[2] = (bankVal[2]&0x0f)|(spi_div<<4);
+
 	memcpy(spi_tx+4, bankVal, 8);
 
 	swap_data(spi_tx, 12);
@@ -384,7 +480,8 @@ bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_send_data(ctx, spi_tx, 14);
 }
 
-bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id)
+bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, bool softRest, uint8_t spdGo,
+								uint8_t sycNum, uint32_t spdSetupT)	
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
@@ -396,6 +493,22 @@ bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x06;
 
+		if (softRest)
+	{
+		//TODO
+	}
+
+	spdGo &= 0x01;
+	bankVal[2] = (bankVal[2]&0x0f)|(spdGo<<4);
+	
+	bankVal[3] = sycNum;
+
+	spdSetupT &= 0x00ffffff;
+	bankVal[5] = (spdSetupT>>16)&0xff;
+	bankVal[6] = (spdSetupT>>8)&0xff;
+	bankVal[7] = (spdSetupT>>0)&0xff;
+	
+	
 	memcpy(spi_tx+4, bankVal, 8);
 
 	swap_data(spi_tx, 12);

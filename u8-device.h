@@ -20,6 +20,7 @@
 #include "miner.h"
 #include "elist.h"
 
+#define spiFreq	0x01
 #define CMD_AUTO_ADDR		0xa5
 #define CMD_WRITE_JOB		0x33
 #define CMD_READ_RESULT	0x44
@@ -27,11 +28,14 @@
 #define CMD_WRITE_REG		0x86
 #define ADDR_BROADCAST		0x00
 
+#define ASIC_RESULT_LEN		8
+#define READ_RESULT_LEN		(ASIC_RESULT_LEN+2)
+
 #define ASIC_CHAIN_NUM		3
 #define ASIC_CHIP_NUM		63
 
-/*2+80+4+2(crc)*/
-#define JOB_LENGTH		88
+/*2+82+2(crc)*/
+#define JOB_LENGTH		86
 #define MAX_CMD_LENGTH		(JOB_LENGTH + ASIC_CHIP_NUM*2*2)
 
 struct work_ent {
@@ -156,9 +160,10 @@ extern bool cmd_auto_address(struct spi_ctx *ctx, uint8_t chip_id);
 extern bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3);
 extern bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, uint8_t spdVid, uint8_t glbSpd);
 extern bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn);
-extern bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id);
-extern bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id);
-extern bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id);
+extern bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id, uint32_t nonceTarget);
+extern bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spi_div);
+extern bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, bool softRest, uint8_t spdGo,
+								uint8_t sycNum, uint32_t spdSetupT);
 extern bool cmd_write_register_7(struct spi_ctx *ctx, uint8_t chip_id);
 extern bool cmd_write_register_8(struct spi_ctx *ctx, uint8_t chip_id);
 #endif

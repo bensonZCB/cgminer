@@ -1430,6 +1430,11 @@ struct pool {
 #define GETWORK_MODE_SOLO 'C'
 
 struct work {
+
+#ifdef USE_U8
+	uint32_t version;
+	uint32_t version1;
+#endif	
 	unsigned char	data[128];
 	unsigned char	midstate[32];
 	unsigned char   midstate1[32];
@@ -1496,9 +1501,6 @@ struct work {
 	struct timeval	tv_work_start;
 	struct timeval	tv_work_found;
 	char		getwork_mode;
-#ifdef USE_BITMAIN_SOC
-    int version;
-#endif
 };
 
 #ifdef USE_MODMINER

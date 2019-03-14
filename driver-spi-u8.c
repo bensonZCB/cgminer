@@ -161,9 +161,225 @@ void u8_detect_chain(bool hotplug)
 	
 }
 
+static uint8_t  * create_job( struct work *work, uint8_t chip_id)
+{
+	uint16_t crc;
+	static uint8_t jobinfo[JOB_LENGTH] = {0};
+#if 0
+	{
+		/* command */
+		0x00, 0x00,
+		/* speed info */
+		0x01, 0x11,
+		/* wdata */
+		0x00, 0x00, 0x00, 0x00, 
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		/* midstate */
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		/* midstate1 */
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+		/* start nonce */
+		0x00, 0x00, 0x00, 0x00,
+		/* crc */
+		0x00, 0x00
+	};
+#endif	
+
+	jobinfo[0] = CMD_WRITE_JOB;
+	jobinfo[1] = chip_id;
+
+	//speed info
+	jobinfo[2] = 0x01;
+	jobinfo[3] = 0x11;
+	//wdata
+	memcpy(jobinfo+4, (work->data+64), 12);
+	//midstate
+	memcpy(jobinfo+16, work->midstate, 32);
+	//midstate1
+	memcpy(jobinfo+48, work->midstate1, 32);
+	swap_data(jobinfo, JOB_LENGTH);
+	crc = CRC16(jobinfo, JOB_LENGTH-2);
+
+	jobinfo[JOB_LENGTH-2] = (uint8_t)((crc >> 0) & 0xff);
+	jobinfo[JOB_LENGTH-1] = (uint8_t)((crc >> 8) & 0xff);
+	
+}
+
+
+static bool set_work(struct u8_chain *achain,uint8_t chip_id, struct work *work)
+{
+	bool ret=false;
+	struct spi_ctx *ctx = achain->spi_ctx;
+	struct u8_chip *chip = &achain->chips[chip_id -1];
+
+	if (chip->work[0] != NULL)
+	{
+		if (chip->work[1] != NULL)
+		{
+			work_completed(achain->cgpu, chip->work[1]);
+		}
+		chip->work[1] = chip->work[0];
+	}
+
+	uint8_t *jobdata = create_job(work, chip_id);
+	if (!cmd_write_job(achain, chip_id, jobdata))
+	{
+		work_completed(achain->cgpu, work);
+		chip->work[0] = NULL;
+		ret = false;
+	}
+	else
+	{
+		chip->work[0] = work;
+		ret = true;
+	}
+
+	return ret;
+}
+
+static bool get_nonce(struct u8_chain *achain, uint8_t *nonce, uint8_t *chip_id ,uint8_t *midstat_id, uint8_t *ntime)
+{
+	uint8_t buffer[24]={0};
+	if (cmd_read_result(achain, ADDR_BROADCAST,buffer))
+	{
+		*chip_id = buffer[0];
+		*ntime = buffer[2];
+		*midstat_id = buffer[3];
+		
+		memcpy(nonce, buffer + 4, 2);
+		memcpy(nonce+2, buffer + 2, 2);
+		//applog(LOG_ERR, "Got nonce for chip %d / job_id %d, NONCE=0x%08x",
+		//	   *chip_id, *job_id, (*(uint32_t *)nonce));
+		return true;
+	}
+
+	return false;
+}
+
 static int64_t u8_scanwork(struct thr_info *thr)
 {
-	return 0;
+	struct cgpu_info *cgpu = thr->cgpu;
+	struct u8_chain *achain = cgpu->device_data;
+	bool work_updated = false;
+	struct timeval t_now;
+	uint64_t accept = 0;
+	uint32_t nonce;
+	char str_ntime[12]={0};
+	uint32_t ntime;
+	uint8_t chip_id;
+	uint8_t midstat_id;
+	
+	int i, j;
+
+	mutex_lock(&achain->lock);
+
+	for (i=0; i<2; i++)
+	{
+		if (!get_nonce(achain, (uint8_t*)&nonce, &chip_id, &midstat_id, &ntime))
+			break;
+		work_updated = true;
+		if (chip_id<1 || chip_id>achain->num_active_chips)
+		{
+			applog(LOG_WARNING, "%s, wrong chip_id %d", basename(achain->devname), chip_id);
+			continue;
+		}
+
+		struct u8_chip *chip = &achain->chips[chip_id -1];
+		struct work *work  = chip->work[0];
+		uint32_t *pversion = (uint32_t *)work->data[0];
+		
+		if (work == NULL) 
+		{
+			/* already been flushed => stale */
+			applog(LOG_WARNING, "%s: chip %d: stale nonce 0x%08x",
+			       basename(achain->devname), chip_id, nonce);
+			chip->stales++;
+			continue;
+		}
+
+		free(work->ntime);
+		snprintf(str_ntime, 9, "%08x", ntime);
+
+		if (midstat_id)
+			*pversion = work->version1;
+		else
+			*pversion = work->version;
+
+		uint32_t *pntime = (uint32_t *)(work->hash + 20);
+		work->ntime = strdup(str_ntime);
+		*pntime = ntime;
+
+		if (!submit_nonce(thr, work, nonce)) 
+		{
+			cgpu->last_nonce = 0;
+			chip->hw_errors++;
+
+			//recheck
+			work  = chip->work[1];
+			pversion = (uint32_t *)work->data[0];
+			
+			if (midstat_id)
+				*pversion = work->version1;
+			else
+				*pversion = work->version;
+
+			if (work == NULL) 
+			{
+				/* already been flushed => stale */
+				applog(LOG_WARNING, "%s: chip %d: stale nonce 0x%08x",
+			       			basename(achain->devname), chip_id, nonce);
+				chip->stales++;
+				continue;
+			}
+
+			uint32_t *pntime = (uint32_t *)(work->hash + 20);
+			work->ntime = strdup(str_ntime);
+			*pntime = ntime;
+			
+			if (!submit_nonce(thr, work, nonce)) 
+			{
+				chip->hw_errors++;
+				continue;
+			}
+
+			applog(LOG_DEBUG, "YEAH: %s: chip %d / midstat_id %d: nonce 0x%08x",
+		       			basename(achain->devname), chip_id, midstat_id, nonce);
+			chip->chip_nonces_found++;
+			accept += (int64_t)work->sdiff;
+		}			
+	}
+
+	cgtime(&t_now);
+	uint32_t t_ms = ms_tdiff(&t_now, &achain->last_set_work_t);
+
+	if (t_ms>1*1000 || achain->need_flush_job)
+	{
+		struct work *work;
+		work_updated = true;
+
+		for (i=0; i<achain->num_active_chips; i++)
+		{
+			work = wq_dequeue(&achain->active_wq);
+			if (work != NULL) 
+			{
+		    		achain->need_flush_job = false;
+				if (set_work(achain, i+1, work)) 
+				{
+				}
+			}
+		}
+	}
+	mutex_unlock(&achain->lock);
+
+	return ((int64_t) accept<< 32);
 }
 
 static bool u8_queue_full(struct cgpu_info *cgpu)

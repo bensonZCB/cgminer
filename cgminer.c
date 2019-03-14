@@ -2605,11 +2605,24 @@ static void calc_midstate(struct pool *pool, struct work *work)
 
 		memcpy(work->data, &(pool->vmask_001[0]), 4);
 	}
+	
 	flip64(data32, work->data);
 	sha256_init(&ctx);
 	sha256_update(&ctx, data, 64);
 	cg_memcpy(work->midstate, ctx.h, 32);
 	endian_flip32(work->midstate, work->midstate);
+
+	#ifdef USE_U8
+		uint32_t *pversion = (uint32_t*)work->data;
+		work->version = *pversion;
+		work->version1 = 0x0000c020;
+		
+		flip64(data32, work->data);
+		sha256_init(&ctx);
+		sha256_update(&ctx, data, 64);
+		cg_memcpy(work->midstate2, ctx.h, 32);
+		endian_flip32(work->midstate2, work->midstate2);
+	#endif
 }
 
 /* Returns the current value of total_work and increments it */
