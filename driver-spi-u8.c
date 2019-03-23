@@ -72,7 +72,7 @@ struct u8_chain *init_u8_chain(struct spi_ctx *ctx, int chain_id)
 		}
 		else
 		{
-			cgsleep_ms(500);
+			goto FAIL;
 		}
 	}
 
@@ -125,7 +125,7 @@ void u8_detect_chain(bool hotplug)
 		
 	}
 
-	for (i=0; i<ASIC_CHAIN_NUM; i++)
+	for (i=1; i<ASIC_CHAIN_NUM; i++)
 	{
 		if(spi[i] == NULL)
 			continue;
@@ -139,6 +139,10 @@ void u8_detect_chain(bool hotplug)
 			Set_Led_OnOf(spi[i]->config.bus, LED_DISABLE);
 			continue;
 		}
+	printf("----------------------------------------------\n");
+		config_hash_board(chain[i]);
+	printf("----------------------------------------------\n");
+
 
 		Set_Led_OnOf(spi[i]->config.bus, LED_ENABLE);
 		struct cgpu_info *cgpu = malloc(sizeof(*cgpu));
@@ -153,64 +157,105 @@ void u8_detect_chain(bool hotplug)
 		chain[i]->cgpu = cgpu;
 		add_cgpu(cgpu);
 	}
-	
 
 	sprintf(g_miner_version, "%s", "18.7.22.08");
 	sprintf(g_miner_compiletime, "%s", "Wed May 3 19:18:52 CST 2017");
 	sprintf(g_miner_type, "%s", "StuMiner U8"); 
-	
 }
 
 static uint8_t  * create_job( struct work *work, uint8_t chip_id)
 {
 	uint16_t crc;
 	static uint8_t jobinfo[JOB_LENGTH] = {0};
-#if 0
-	{
-		/* command */
-		0x00, 0x00,
-		/* speed info */
-		0x01, 0x11,
-		/* wdata */
-		0x00, 0x00, 0x00, 0x00, 
-		0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-		/* midstate */
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		/* midstate1 */
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	uint32_t *pnonce = (uint32_t*)(jobinfo+80);
 
-		/* start nonce */
-		0x00, 0x00, 0x00, 0x00,
-		/* crc */
-		0x00, 0x00
-	};
-#endif	
+	#define BOOST_EN   0x00
+	#define START_NONCE	0x00
+	
+
+	#if 1 //for debug
+	#define START_NONCE	0x032ac98f
+	//NONCE = 0x032ac98f
+	uint32_t dat[20]={0x00000020, 0xac8a4806, 0x039f47f6, 0xf08c14f1, 0x46bfeba5, 
+				       0x1e5331fa, 0x39e30200, 0x00000000, 0x00000000, 0xda8511c3, 
+				       0xbe7d0189, 0x1005ef49, 0xa26f0f6d, 0x8aa8b1e8, 0xdc9acac6, 
+				       0x88cea418, 0xf3caf1f0, 0x34f3925c, 0x17612e17, 0x00000000};
+
+	uint32_t mid[8] = {0x33fb8f54, 0xac8f0266, 0x9909ba17, 0x48d36be5,
+						0x85180446, 0x24d4b2f7, 0x46e91226, 0x0a732c14};
+
+	uint32_t target[8] = {0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+						0xfffff800, 0xc34f3caf, 0x00000000};
+
+	memcpy(work->target, target, 8*4);
+	memcpy(work->data, dat, 20*4);
+	memcpy(work->midstate, mid, 8*4);
+	memcpy(work->midstate1, mid, 8*4);
+	
+	#endif
+	
+	
 
 	jobinfo[0] = CMD_WRITE_JOB;
 	jobinfo[1] = chip_id;
 
 	//speed info
-	jobinfo[2] = 0x01;
-	jobinfo[3] = 0x11;
-	//wdata
-	memcpy(jobinfo+4, (work->data+64), 12);
+	jobinfo[2] = 0x00;
+	jobinfo[3] = 0x01;
+
+	uint32_t xmid1[8],xmid[8],wdata[3], *pmid;
+
+	pmid = work->midstate;
+	for (int i=0; i<8; i++)
+	{
+		xmid[i] = swab32(pmid[7-i]);
+	}
+
+	pmid = work->midstate1;
+	for (int i=0; i<8; i++)
+	{
+		xmid1[i] = swab32(pmid[7-i]);
+	}
+
+	uint32_t *pdata = (uint32_t*)(work->data+64);
+
+	
+	wdata[0] = swab32(pdata[2]);
+	wdata[1] = swab32(pdata[1]);
+	wdata[2] = swab32(pdata[0]);
+
 	//midstate
-	memcpy(jobinfo+16, work->midstate, 32);
+	memcpy(jobinfo+4, xmid1, 32);
 	//midstate1
-	memcpy(jobinfo+48, work->midstate1, 32);
+	memcpy(jobinfo+36, xmid, 32);
+	//wdata
+	memcpy(jobinfo+68, wdata, 12);
+
+	//init nonce
+	//*pnonce = swap
+	jobinfo[80] = (START_NONCE>>24)&0xff;
+	jobinfo[81] = (START_NONCE>>16)&0xff;
+	jobinfo[82] = (START_NONCE>>8)&0xff;
+	jobinfo[83] = (START_NONCE>>0)&0xff;
+
+	#if 1
+		applog(LOG_ERR, "job data:");
+		for (int i=0; i<JOB_LENGTH-2; i++)
+		{
+			printf("%02x ", jobinfo[i]);
+			if (((i+1)%16) == 0)printf("\n");
+		}
+	#endif
+	
 	swap_data(jobinfo, JOB_LENGTH);
 	crc = CRC16(jobinfo, JOB_LENGTH-2);
+	printf("%04x\n", crc);
 
 	jobinfo[JOB_LENGTH-2] = (uint8_t)((crc >> 0) & 0xff);
 	jobinfo[JOB_LENGTH-1] = (uint8_t)((crc >> 8) & 0xff);
 	
+
+	return jobinfo;
 }
 
 
@@ -227,8 +272,8 @@ static bool set_work(struct u8_chain *achain,uint8_t chip_id, struct work *work)
 			work_completed(achain->cgpu, chip->work[1]);
 		}
 		chip->work[1] = chip->work[0];
+		chip->work[0] = NULL;
 	}
-
 	uint8_t *jobdata = create_job(work, chip_id);
 	if (!cmd_write_job(achain, chip_id, jobdata))
 	{
@@ -242,6 +287,9 @@ static bool set_work(struct u8_chain *achain,uint8_t chip_id, struct work *work)
 		ret = true;
 	}
 
+	applog(LOG_ERR, "1--chip_%d, chipAddr=%08x, work0-1:%08x %08x", 
+				chip_id, chip, chip->work[0], chip->work[1]);
+
 	return ret;
 }
 
@@ -250,22 +298,37 @@ static bool get_nonce(struct u8_chain *achain, uint8_t *nonce, uint8_t *chip_id 
 	uint8_t buffer[24]={0};
 	if (cmd_read_result(achain, ADDR_BROADCAST,buffer))
 	{
+		uint16_t rx_crc = CRC16(buffer, 8);
+		uint16_t *pcrc = &buffer[8];
+		
+		if (rx_crc != *pcrc)
+		{
+			applog(LOG_ERR, "read nonce crc error!");
+			return false;
+		}
+		
 		*chip_id = buffer[0];
 		*ntime = buffer[2];
 		*midstat_id = buffer[3];
+
+		nonce[0] = buffer[6];
+		nonce[1] = buffer[7];
+		nonce[2] = buffer[4];
+		nonce[3] = buffer[5];
 		
-		memcpy(nonce, buffer + 4, 2);
-		memcpy(nonce+2, buffer + 2, 2);
-		//applog(LOG_ERR, "Got nonce for chip %d / job_id %d, NONCE=0x%08x",
-		//	   *chip_id, *job_id, (*(uint32_t *)nonce));
+		applog(LOG_ERR, "Got nonce for chip_%d  mid_id=%d, NONCE=0x%08x, ntime=%02x",
+			   *chip_id, *midstat_id, (*(uint32_t *)nonce), *ntime);
+		
 		return true;
 	}
-
 	return false;
 }
 
+static int cunt = 0;
+
 static int64_t u8_scanwork(struct thr_info *thr)
 {
+#if 1
 	struct cgpu_info *cgpu = thr->cgpu;
 	struct u8_chain *achain = cgpu->device_data;
 	bool work_updated = false;
@@ -273,7 +336,8 @@ static int64_t u8_scanwork(struct thr_info *thr)
 	uint64_t accept = 0;
 	uint32_t nonce;
 	char str_ntime[12]={0};
-	uint32_t ntime;
+	uint8_t chip_ntime;
+	uint32_t new_ntime;
 	uint8_t chip_id;
 	uint8_t midstat_id;
 	
@@ -281,41 +345,66 @@ static int64_t u8_scanwork(struct thr_info *thr)
 
 	mutex_lock(&achain->lock);
 
+	if (cunt>10) sleep(1000);
+
 	for (i=0; i<2; i++)
 	{
-		if (!get_nonce(achain, (uint8_t*)&nonce, &chip_id, &midstat_id, &ntime))
+		if (!get_nonce(achain, (uint8_t*)&nonce, &chip_id, &midstat_id, &chip_ntime))
 			break;
+		cunt++;
+		//applog(LOG_ERR, "%s, %s, %d", __FILE__, __func__, __LINE__);
 		work_updated = true;
 		if (chip_id<1 || chip_id>achain->num_active_chips)
 		{
-			applog(LOG_WARNING, "%s, wrong chip_id %d", basename(achain->devname), chip_id);
+			//applog(LOG_WARNING, "%s, wrong chip_id %d", basename(achain->devname), chip_id);
 			continue;
 		}
-
 		struct u8_chip *chip = &achain->chips[chip_id -1];
 		struct work *work  = chip->work[0];
-		uint32_t *pversion = (uint32_t *)work->data[0];
+
+		applog(LOG_ERR, "2--chip_%d, chipAddr=%08x, work0-1:%08x %08x", 
+				chip_id, chip, chip->work[0], chip->work[1]);
 		
 		if (work == NULL) 
 		{
+			applog(LOG_ERR, "a work == NULL");
 			/* already been flushed => stale */
-			applog(LOG_WARNING, "%s: chip %d: stale nonce 0x%08x",
+			applog(LOG_ERR, "%s, %s, %d", __FILE__, __func__, __LINE__);
+			applog(LOG_WARNING, "%s: chip %d: stale nonce 0x%08x\n",
 			       basename(achain->devname), chip_id, nonce);
 			chip->stales++;
+			
 			continue;
 		}
 
-		free(work->ntime);
-		snprintf(str_ntime, 9, "%08x", ntime);
+		uint32_t *pversion = (uint32_t *)work->data;
 
+		uint32_t *pnt = (uint32_t *)(work->data+68);
+
+		applog(LOG_ERR, "old ntime = 0x%08x, str=%s", work->save_ntime, work->ntime);
+
+		#if 0
+		free(work->ntime);
+		new_ntime = work->save_ntime+chip_ntime;
+		snprintf(str_ntime, 9, "%08x", new_ntime);
+
+		work->ntime = strdup(str_ntime);
+		*pnt = new_ntime;
+		#endif
+
+		applog(LOG_ERR, "new ntime = 0x%08x, str=%s", *pnt, work->ntime);
+
+		#if 1
 		if (midstat_id)
 			*pversion = work->version1;
 		else
 			*pversion = work->version;
+		#endif
 
-		uint32_t *pntime = (uint32_t *)(work->hash + 20);
-		work->ntime = strdup(str_ntime);
-		*pntime = ntime;
+	applog(LOG_ERR, "v1=%08x v2=%08x",work->version, work->version1);
+	applog(LOG_ERR, "use version=%08x",*pversion);
+
+
 
 		if (!submit_nonce(thr, work, nonce)) 
 		{
@@ -323,16 +412,12 @@ static int64_t u8_scanwork(struct thr_info *thr)
 			chip->hw_errors++;
 
 			//recheck
-			work  = chip->work[1];
-			pversion = (uint32_t *)work->data[0];
-			
-			if (midstat_id)
-				*pversion = work->version1;
-			else
-				*pversion = work->version;
+		struct u8_chip *chip = &achain->chips[chip_id -1];
+		struct work *work  = chip->work[1];
 
 			if (work == NULL) 
 			{
+				applog(LOG_ERR, "b work == NULL");
 				/* already been flushed => stale */
 				applog(LOG_WARNING, "%s: chip %d: stale nonce 0x%08x",
 			       			basename(achain->devname), chip_id, nonce);
@@ -340,10 +425,32 @@ static int64_t u8_scanwork(struct thr_info *thr)
 				continue;
 			}
 
-			uint32_t *pntime = (uint32_t *)(work->hash + 20);
+			uint32_t *pversion = (uint32_t *)work->data;
+
+			uint32_t *pnt = (uint32_t *)(work->data+68);
+
+			applog(LOG_ERR, "old ntime = 0x%08x, str=%s", *pnt, work->ntime);
+
+			#if 0
+			free(work->ntime);
+			snprintf(str_ntime, 9, "%08x", new_ntime);
+
 			work->ntime = strdup(str_ntime);
-			*pntime = ntime;
-			
+			*pnt = new_ntime;
+			#endif
+
+			applog(LOG_ERR, "new ntime = 0x%08x, str=%s", *pnt, work->ntime);
+
+			#if 0
+			if (midstat_id)
+				*pversion = work->version1;
+			else
+				*pversion = work->version;
+			#endif
+
+			applog(LOG_ERR, "version=%08x",*pversion);
+
+
 			if (!submit_nonce(thr, work, nonce)) 
 			{
 				chip->hw_errors++;
@@ -354,32 +461,50 @@ static int64_t u8_scanwork(struct thr_info *thr)
 		       			basename(achain->devname), chip_id, midstat_id, nonce);
 			chip->chip_nonces_found++;
 			accept += (int64_t)work->sdiff;
-		}			
-	}
+		}		
 
+	}
 	cgtime(&t_now);
 	uint32_t t_ms = ms_tdiff(&t_now, &achain->last_set_work_t);
 
-	if (t_ms>1*1000 || achain->need_flush_job)
+	if (t_ms>60*1000 || achain->need_flush_job)
 	{
+		#if 0
+			for (int k=5; k>=0; k--)
+			{
+				printf("k:%d\n", k);
+				sleep(1);
+			}
+		#endif
+		
 		struct work *work;
 		work_updated = true;
-
+		cgtime(&achain->last_set_work_t);
 		for (i=0; i<achain->num_active_chips; i++)
 		{
 			work = wq_dequeue(&achain->active_wq);
+			
 			if (work != NULL) 
 			{
 		    		achain->need_flush_job = false;
+
+				applog(LOG_ERR, "%s, chip_%d, setwork, t=%ds", basename(achain->devname), i+1, t_ms/1000);
 				if (set_work(achain, i+1, work)) 
 				{
 				}
 			}
 		}
 	}
+
+	#if 0
+		applog(LOG_ERR, "stop...");
+		sleep(10000);
+	#endif
+	
 	mutex_unlock(&achain->lock);
 
 	return ((int64_t) accept<< 32);
+#endif
 }
 
 static bool u8_queue_full(struct cgpu_info *cgpu)
@@ -422,9 +547,8 @@ struct device_drv u8_drv = {
 	.dname = "u8",
 	.name = "u8",
 	.drv_detect = u8_detect_chain,
-	
 	.hash_work = hash_queued_work, 
 	.scanwork = u8_scanwork,
 	.queue_full = u8_queue_full,
-	.update_work = u8_flush_work,
+	//.update_work = u8_flush_work,
 };

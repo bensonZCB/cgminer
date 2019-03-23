@@ -2613,15 +2613,20 @@ static void calc_midstate(struct pool *pool, struct work *work)
 	endian_flip32(work->midstate, work->midstate);
 
 	#ifdef USE_U8
+	//applog(LOG_ERR, "~ ~ ~ ~ ~ ~ gen mid1~ ~ ~ ~ ~ ~ ~");
 		uint32_t *pversion = (uint32_t*)work->data;
+	//applog(LOG_ERR, "pversion = %08x", *pversion);
 		work->version = *pversion;
-		work->version1 = 0x0000c020;
-		
+		work->version1 = (work->version|0x0000c000);//0x0000c020
+
+		*pversion = work->version1;
+	//applog(LOG_ERR, "pversion = %08x", *pversion);	
 		flip64(data32, work->data);
 		sha256_init(&ctx);
 		sha256_update(&ctx, data, 64);
-		cg_memcpy(work->midstate2, ctx.h, 32);
-		endian_flip32(work->midstate2, work->midstate2);
+		cg_memcpy(work->midstate1, ctx.h, 32);
+		endian_flip32(work->midstate1, work->midstate1);
+		work->save_ntime = *((uint32_t *)(work->data+68));
 	#endif
 }
 
@@ -8128,6 +8133,22 @@ bool test_nonce(struct work *work, uint32_t nonce)
 	uint32_t *hash_32 = (uint32_t *)(work->hash + 28);
 
 	rebuild_nonce(work, nonce);
+
+	#if 1
+		uint32_t *p = work->hash;
+		applog(LOG_ERR, "x work->hash:");
+		for (int i=0; i <8 ; i++)
+			printf("%08x ", p[i]);
+		printf("\n");
+
+		p = work->target;
+		applog(LOG_ERR, "x work->target:");
+		for (int i=0; i <8 ; i++)
+			printf("%08x ", p[i]);
+		printf("\n");
+	#endif
+	
+	
 	return (*hash_32 == 0);
 }
 
@@ -8172,6 +8193,20 @@ bool submit_tested_work(struct thr_info *thr, struct work *work)
 	struct work *work_out;
 	update_work_stats(thr, work);
 
+	#if 1
+		uint32_t *p = work->hash;
+		applog(LOG_ERR, "x work->hash:");
+		for (int i=0; i <8 ; i++)
+			printf("%08x ", p[i]);
+		printf("\n");
+
+		p = work->target;
+		applog(LOG_ERR, "x work->target:");
+		for (int i=0; i <8 ; i++)
+			printf("%08x ", p[i]);
+		printf("\n");
+	#endif
+
 	if (!fulltest(work->hash, work->target)) {
 		applog(LOG_INFO, "%s %d: Share above target", thr->cgpu->drv->name,
 		       thr->cgpu->device_id);
@@ -8189,7 +8224,7 @@ static bool new_nonce(struct thr_info *thr, uint32_t nonce)
 	struct cgpu_info *cgpu = thr->cgpu;
 
 	if (unlikely(cgpu->last_nonce == nonce)) {
-		applog(LOG_INFO, "%s %d duplicate share detected as HW error",
+		applog(LOG_DEBUG, "%s %d duplicate share detected as HW error",
 		       cgpu->drv->name, cgpu->device_id);
 		return false;
 	}

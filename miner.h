@@ -617,7 +617,8 @@ static inline void string_elist_del(struct string_elist *item)
 }
 
 
-static inline uint32_t swab32(uint32_t v)
+//static inline uint32_t swab32(uint32_t v)
+inline uint32_t swab32(uint32_t v)
 {
 	return bswap_32(v);
 }
@@ -1435,6 +1436,7 @@ struct work {
 	uint32_t version;
 	uint32_t version1;
 #endif	
+	uint32_t save_ntime;
 	unsigned char	data[128];
 	unsigned char	midstate[32];
 	unsigned char   midstate1[32];

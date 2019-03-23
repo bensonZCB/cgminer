@@ -43,11 +43,21 @@ void swap_data(uint8_t *data, int len)
 
 bool cmd_write_job(struct u8_chain *achain, uint8_t chip_id, uint8_t *job)
 {
-	bool ret = false;
+	bool ret = true;
 	struct spi_ctx *ctx = achain->spi_ctx;
-	uint8_t spi_tx[MAX_CMD_LENGTH];
-	uint8_t spi_rx[MAX_CMD_LENGTH];
+	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
+	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t tx_crc = 0, rx_crc = 0;
+
+	#if 0
+	applog(LOG_ERR, "write job:");
+	for (int i=0; i<JOB_LENGTH; i++)
+	{
+		printf("%02x ", job[i]);
+
+		if (i%4 == 16)printf("\n");
+	}
+	#endif
 
 	memcpy(spi_tx, job, JOB_LENGTH);
 	ret = spi_write_data(ctx, spi_tx, JOB_LENGTH);
@@ -55,14 +65,20 @@ bool cmd_write_job(struct u8_chain *achain, uint8_t chip_id, uint8_t *job)
 	spi_poll_result(ctx, job[1], chip_id, spi_rx, 4);
 
 	rx_crc = spi_rx[3] << 8 | spi_rx[2];
-	tx_crc = spi_tx[87] << 8 | spi_tx[86];
+	tx_crc = spi_tx[85] << 8 | spi_tx[84];
+
+	applog(LOG_ERR, "tx_crc=%04x, rx_crc=%04x", tx_crc, rx_crc);
 
 	if(rx_crc != tx_crc)
 	{
+		applog(LOG_ERR, "tx_crc=%04x, rx_crc=%04x", tx_crc, rx_crc);
 		applog(LOG_ERR, "~~~~~crc error!~~~~%s~chip_%d~~~~", basename(achain->devname), chip_id);
 		//job_crc_err++;
 		//chip->hw_errors++;
+		 ret = false;
 	}
+
+	return ret;
 }
 
 bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
@@ -86,7 +102,6 @@ bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
 		return false;
 	}
 
-
 	tx_len = 4 * ASIC_CHIP_NUM +4;	//???
 	memset(spi_rx, 0, sizeof(spi_rx));
 	for(i = 0; i < tx_len; i += 2)
@@ -96,8 +111,6 @@ bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
 			return false;
 		}
 
-
-		//if(((spi_rx[1] & 0x0f) == 0x04) && (spi_rx[0] != 0))
 		if((spi_rx[1]== 0x04) && (spi_rx[0] != 0))
 		{
 			index = 0;	
@@ -108,10 +121,15 @@ bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
 					return false;
 				}					
 				index = index + 2;
-			}while(index < ASIC_RESULT_LEN); // 4bytes nonce
+			}while(index < ASIC_RESULT_LEN); 
 
-			//applog(LOG_ERR, "get nonce :0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", spi_rx[0], spi_rx[1], 
-			//	spi_rx[2], spi_rx[3], spi_rx[4], spi_rx[5], spi_rx[6], spi_rx[7]);
+			if (spi_rx[4]!= 0x00)
+			{
+			applog(LOG_ERR, "get nonce :0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", 
+				spi_rx[0], spi_rx[1], 
+				spi_rx[2], spi_rx[3], spi_rx[4], spi_rx[5], spi_rx[6], spi_rx[7], spi_rx[8], spi_rx[9]);
+			}
+
 			memcpy(res, spi_rx, READ_RESULT_LEN);
 			return true;
 							
@@ -136,8 +154,9 @@ bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t 
 	memset(spi_tx, 0, sizeof(spi_tx));
 	memset(spi_rx, 0, sizeof(spi_rx));
 
-	tx_len = ASIC_CHIP_NUM*4+len+4;	
+	tx_len = ASIC_CHIP_NUM*4+len+100;	
 
+	applog(LOG_WARNING, "poll result....");
 	for(tmp_len = 0; tmp_len < tx_len; tmp_len += 2)
 	{
 		if(!spi_read_data(ctx, spi_rx, 2))
@@ -145,6 +164,8 @@ bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t 
 			applog(LOG_WARNING, "poll result: transfer fail !");
 			return false;
 		}
+
+		applog(LOG_ERR, "%02x %02x ", spi_rx[0], spi_rx[1]);
 		
 		if(spi_rx[1] == cmd)
 		{
@@ -154,7 +175,8 @@ bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t 
 				if(!ret)
 				{
 					return false;
-				}					
+				}				
+				applog(LOG_ERR, "%02x %02x ", spi_rx[2 + index], spi_rx[2 + index+1]);
 				index = index + 2;
 				
 			}while(index < len);
@@ -164,6 +186,8 @@ bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t 
 		}
 		cgsleep_us(2);
 	}
+
+	applog(LOG_ERR, "spi_poll_result error !!!");
 
 	return false;
 }
@@ -233,21 +257,26 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	uint8_t Fb_l4bit = FbDiv3 &0x0f;
 	regpll3[1] = Fb_h8bit;
 	regpll3[2] = (regpll3[2]&0x0f)|(Fb_l4bit<<4);
+	regpll3[0] = (regpll3[0]&0xc0)|(RefDiv&0x3f);
+	
 	//pll2
 	Fb_h8bit = (FbDiv2>>4)&0xff;
 	Fb_l4bit = FbDiv2 &0x0f;
 	regpll2[1] = Fb_h8bit;
 	regpll2[2] = (regpll2[2]&0x0f)|(Fb_l4bit<<4);
+	regpll2[0] = (regpll2[0]&0xc0)|(RefDiv&0x3f);
 	//pll1
 	Fb_h8bit = (FbDiv1>>4)&0xff;
 	Fb_l4bit = FbDiv1 &0x0f;
 	regpll1[1] = Fb_h8bit;
 	regpll1[2] = (regpll1[2]&0x0f)|(Fb_l4bit<<4);
+	regpll1[0] = (regpll1[0]&0xc0)|(RefDiv&0x3f);
 	//pll0
 	Fb_h8bit = (FbDiv0>>4)&0xff;
 	Fb_l4bit = FbDiv0 &0x0f;
 	regpll0[1] = Fb_h8bit;
 	regpll0[2] = (regpll0[2]&0x0f)|(Fb_l4bit<<4);
+	regpll0[0] = (regpll0[0]&0xc0)|(RefDiv&0x3f);
 
 	memcpy(spi_tx+4, regpll3, 4);
 	memcpy(spi_tx+8, regpll2, 4);
@@ -304,6 +333,83 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 22);	
+	flush_spi(ctx);
+}
+
+void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3)
+{
+	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
+	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
+	uint16_t crc;
+
+	uint8_t RefDiv = 4; //oscilator=20M -> RefDiv=4; oscilator=25M -> RefDiv=5;		
+	uint32_t FbDiv3 = (2*pll3)/5;
+	uint32_t FbDiv2 = (2*pll2)/5;
+	uint32_t FbDiv1 = (2*pll1)/5;
+	uint32_t FbDiv0 = (2*pll0)/5;
+
+	uint8_t regpll3[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll2[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll1[4]={0x02, 0x08, 0x22, 0x1f};
+	uint8_t regpll0[4]={0x02, 0x08, 0x22, 0x1f};
+
+	spi_tx[0] = CMD_WRITE_REG;
+	spi_tx[1] = chip_id;
+	spi_tx[2] = 0x00;
+	spi_tx[3] = 0x01;
+
+	/************step1 set pll bit************/
+	//pll3
+	uint8_t Fb_h8bit = (FbDiv3>>4)&0xff;
+	uint8_t Fb_l4bit = FbDiv3 &0x0f;
+	regpll3[1] = Fb_h8bit;
+	regpll3[2] = (regpll3[2]&0x0f)|(Fb_l4bit<<4);
+	regpll3[0] = (regpll3[0]&0xc0)|(RefDiv&0x3f);
+	//pll2
+	 Fb_h8bit = (FbDiv2>>4)&0xff;
+	 Fb_l4bit = FbDiv2 &0x0f;
+	regpll2[1] = Fb_h8bit;
+	regpll2[2] = (regpll2[2]&0x0f)|(Fb_l4bit<<4);
+	regpll2[0] = (regpll2[0]&0xc0)|(RefDiv&0x3f);
+	//pll1
+	 Fb_h8bit = (FbDiv1>>4)&0xff;
+	 Fb_l4bit = FbDiv1 &0x0f;
+	regpll1[1] = Fb_h8bit;
+	regpll1[2] = (regpll1[2]&0x0f)|(Fb_l4bit<<4);
+	regpll1[0] = (regpll1[0]&0xc0)|(RefDiv&0x3f);
+	//pll0
+	 Fb_h8bit = (FbDiv0>>4)&0xff;
+	 Fb_l4bit = FbDiv0 &0x0f;
+	regpll0[1] = Fb_h8bit;
+	regpll0[2] = (regpll0[2]&0x0f)|(Fb_l4bit<<4);
+	regpll0[0] = (regpll0[0]&0xc0)|(RefDiv&0x3f);
+	
+	/***********step 2 set power down bit***********/
+	regpll3[3] &= 0xf9;
+	regpll3[2] &= 0xf9;
+	regpll3[1] &= 0xf9;
+	regpll3[0] &= 0xf9;
+
+	/***********step 3 set pll gate bit*************/
+	regpll3[0] |= 0x80;
+	regpll2[0] |= 0x80;
+	regpll1[0] |= 0x80;
+	regpll0[0] |= 0x80;
+	
+	memcpy(spi_tx+4, regpll3, 4);
+	memcpy(spi_tx+8, regpll2, 4);
+	memcpy(spi_tx+16, regpll1, 4);
+	memcpy(spi_tx+24, regpll0, 4);
+
+
+	swap_data(spi_tx, 20);
+	crc = CRC16(spi_tx, 20);
+
+	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
+	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
+
+	spi_send_data(ctx, spi_tx, 22);	
+	flush_spi(ctx);
 }
 
 bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, uint8_t spdVid, uint8_t glbSpd)
@@ -372,24 +478,41 @@ bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, u
 
 	memcpy(spi_tx+4, bankVal, 16);
 
+	applog(LOG_ERR, "bank2:");
+	for (int i=0; i<20; i++)
+		printf("%02x ", spi_tx[i]);
+
 	swap_data(spi_tx, 20);
 	crc = CRC16(spi_tx, 20);
+	printf("%04x \n", crc);
 
 	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
 	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 22);
+
+	if (chip_id == ADDR_BROADCAST)
+	{
+		flush_spi(ctx);
+	}
+	else
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 }
 
-bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn)
+bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn, uint8_t RollTimeEn)
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
-	uint8_t bankVal[8]={0x10, 0x0f, 0xa0, 0x00, 0x00, 0x00,0x00, 0x64};
+	uint8_t bankVal[8]={0x00, 0x0f, 0xa0, 0x00, 0x00, 0x00,0x00, 0x64};
 
-	uint8_t RollTimeEn = 1;
-	uint32_t RollTimeVal = 100;
+	//uint8_t RollTimeEn = 1;
+	RollTimeEn &= 0x01; 
+	uint32_t RollTimeVal = 8000000;
 
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
@@ -417,6 +540,7 @@ bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn)
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+	flush_spi(ctx);
 }
 
 bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id, uint32_t nonceTarget)
@@ -424,32 +548,51 @@ bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id, uint32_t nonceTa
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
 	uint16_t crc;
-	uint8_t bankVal[8]={0x00, 0x00, 0x00, 0x00, 0xc0, 0x08,0x02, 0x08};
+	uint8_t bankVal[8]={0x00, 0x00, 0x00, 0x00, 0x3f, 0x08,0x02, 0x08};
 
 	//diff for cores (number of zeros)
-	uint8_t cfgMask = 0;
+	uint8_t cfgMask = 0x3f;
 
 	spi_tx[0] = CMD_WRITE_REG;
 	spi_tx[1] = chip_id;
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x04;
 
-	spi_tx[3] = cfgMask;
-
 	bankVal[0] = (nonceTarget>>24);
 	bankVal[1] = (nonceTarget>>16);
 	bankVal[2] = (nonceTarget>>8);
 	bankVal[3] = (nonceTarget>>0);
+	
+	bankVal[4] = cfgMask;
 
 	memcpy(spi_tx+4, bankVal, 8);
 
+	applog(LOG_ERR, "bank4:");
+
+	for (int i=0; i<12; i++)
+		printf("%02x ", spi_tx[i]);
+	
+
 	swap_data(spi_tx, 12);
 	crc = CRC16(spi_tx, 12);
+	printf("%04x \n", crc);
 
 	spi_tx[12] = (uint8_t)((crc >> 0) & 0xff);
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+
+	if (chip_id == ADDR_BROADCAST)
+	{
+		flush_spi(ctx);
+	}
+	else
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank4:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
+
 }
 
 
@@ -478,10 +621,11 @@ bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spi_div)
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+	flush_spi(ctx);
 }
 
-bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, bool softRest, uint8_t spdGo,
-								uint8_t sycNum, uint32_t spdSetupT)	
+bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, uint8_t restProtect, uint8_t cfgRest,
+						uint8_t spdGo,uint8_t sycNum, uint32_t spdSetupT)	
 {
 	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
 	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
@@ -493,10 +637,11 @@ bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, bool softRest, u
 	spi_tx[2] = 0x00;
 	spi_tx[3] = 0x06;
 
-		if (softRest)
-	{
-		//TODO
-	}
+	restProtect &= 0x01;
+	cfgRest &= 0x01;
+
+	bankVal[0] = restProtect;
+	bankVal[1] = cfgRest;
 
 	spdGo &= 0x01;
 	bankVal[2] = (bankVal[2]&0x0f)|(spdGo<<4);
@@ -518,6 +663,7 @@ bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, bool softRest, u
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+	flush_spi(ctx);
 }
 
 bool cmd_write_register_7(struct spi_ctx *ctx, uint8_t chip_id)
@@ -541,6 +687,7 @@ bool cmd_write_register_7(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[69] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 70);
+	flush_spi(ctx);
 }
 
 bool cmd_write_register_8(struct spi_ctx *ctx, uint8_t chip_id)
@@ -564,6 +711,7 @@ bool cmd_write_register_8(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[69] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 70);
+	flush_spi(ctx);
 }
 
 /*
@@ -631,82 +779,32 @@ bool cmd_read_register(struct spi_ctx *ctx, uint8_t chip_id, uint8_t regAddr, ui
 	return true;
 }
 
-void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, uint32_t pll1,uint32_t pll2,uint32_t pll3)
-{
-	uint8_t spi_tx[MAX_CMD_LENGTH]={0};
-	uint8_t spi_rx[MAX_CMD_LENGTH]={0};
-	uint16_t crc;
-
-	uint8_t RefDiv = 4; //oscilator=20M -> RefDiv=4; oscilator=25M -> RefDiv=5;		
-	uint32_t FbDiv3 = (2*pll3)/5;
-	uint32_t FbDiv2 = (2*pll2)/5;
-	uint32_t FbDiv1 = (2*pll1)/5;
-	uint32_t FbDiv0 = (2*pll0)/5;
-
-	uint8_t regpll3[4]={0x02, 0x08, 0x22, 0x1f};
-	uint8_t regpll2[4]={0x02, 0x08, 0x22, 0x1f};
-	uint8_t regpll1[4]={0x02, 0x08, 0x22, 0x1f};
-	uint8_t regpll0[4]={0x02, 0x08, 0x22, 0x1f};
-
-	spi_tx[0] = CMD_WRITE_REG;
-	spi_tx[1] = chip_id;
-	spi_tx[2] = 0x00;
-	spi_tx[3] = 0x01;
-
-	/************step1 set pll bit************/
-	//pll3
-	uint8_t Fb_h8bit = (FbDiv3>>4)&0xff;
-	uint8_t Fb_l4bit = FbDiv3 &0x0f;
-	regpll3[1] = Fb_h8bit;
-	regpll3[2] = (regpll3[2]&0x0f)|(Fb_l4bit<<4);
-	//pll2
-	 Fb_h8bit = (FbDiv2>>4)&0xff;
-	 Fb_l4bit = FbDiv2 &0x0f;
-	regpll2[1] = Fb_h8bit;
-	regpll2[2] = (regpll2[2]&0x0f)|(Fb_l4bit<<4);
-	//pll1
-	 Fb_h8bit = (FbDiv1>>4)&0xff;
-	 Fb_l4bit = FbDiv1 &0x0f;
-	regpll1[1] = Fb_h8bit;
-	regpll1[2] = (regpll1[2]&0x0f)|(Fb_l4bit<<4);
-	//pll0
-	 Fb_h8bit = (FbDiv0>>4)&0xff;
-	 Fb_l4bit = FbDiv0 &0x0f;
-	regpll0[1] = Fb_h8bit;
-	regpll0[2] = (regpll0[2]&0x0f)|(Fb_l4bit<<4);
-	
-	/***********step 2 set power down bit***********/
-	regpll3[3] &= 0xf9;
-	regpll3[2] &= 0xf9;
-	regpll3[1] &= 0xf9;
-	regpll3[0] &= 0xf9;
-
-	/***********step 3 set pll gate bit*************/
-	regpll3[0] |= 0x80;
-	regpll2[0] |= 0x80;
-	regpll1[0] |= 0x80;
-	regpll0[0] |= 0x80;
-	
-	memcpy(spi_tx+4, regpll3, 4);
-	memcpy(spi_tx+8, regpll2, 4);
-	memcpy(spi_tx+16, regpll1, 4);
-	memcpy(spi_tx+24, regpll0, 4);
-
-
-	swap_data(spi_tx, 20);
-	crc = CRC16(spi_tx, 20);
-
-	spi_tx[20] = (uint8_t)((crc >> 0) & 0xff);
-	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
-
-	spi_send_data(ctx, spi_tx, 22);	
-}
-
 void config_hash_board(struct u8_chain *achain)
 {
 	struct spi_ctx *ctx  = achain->spi_ctx;
 	int i, j;
-	uint8_t pHtarget[8]={0};
+
+	//cmd_write_register_1(ctx, ADDR_BROADCAST, 200,200,200,200);
+	cmd_write_register_3(ctx, ADDR_BROADCAST, 0, 0);
+#if 0	
+	cmd_write_register_4(ctx, ADDR_BROADCAST, 0xffffffff);
+	cmd_write_register_2(ctx, ADDR_BROADCAST, 0, 1, 0);
+#else
+	cmd_write_register_2(ctx, 1, 0, 1, 2);
+	cmd_write_register_2(ctx, 2, 0, 1, 2);
+	cmd_write_register_4(ctx, 0x01, 0xffffffff);
+	cmd_write_register_4(ctx, 0x02, 0xffffffff);
+
+	//software reset
+	cmd_write_register_6(ctx, ADDR_BROADCAST, 1,0,
+								1, 0xff,  0);
+	cmd_write_register_6(ctx, ADDR_BROADCAST, 0,1,
+								1, 0xff,  0);
+#endif	
+	
+	//cmd_write_register_5(ctx, ADDR_BROADCAST, spiDiv);
+	//cmd_write_register_7(ctx, ADDR_BROADCAST);
+	//cmd_write_register_8(ctx, ADDR_BROADCAST);
 }
 
 
@@ -796,7 +894,6 @@ int asic_gpio_read(int gpio)
 	fd = open(fpath, O_RDONLY);
 	if(fd == -1)
 	{
-		printf("=========%s, %s, %d ========\n ", __FILE__, __func__, __LINE__);
 		return -1;
 	}
 	memset(fvalue, 0, sizeof(fvalue));
