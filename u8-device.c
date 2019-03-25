@@ -792,8 +792,8 @@ void config_hash_board(struct u8_chain *achain)
 #else
 	cmd_write_register_2(ctx, 1, 0, 1, 2);
 	cmd_write_register_2(ctx, 2, 0, 1, 2);
-	cmd_write_register_4(ctx, 0x01, 0xffffffff);
-	cmd_write_register_4(ctx, 0x02, 0xffffffff);
+	cmd_write_register_4(ctx, 0x01, achain->current_HTarget6);
+	cmd_write_register_4(ctx, 0x02, achain->current_HTarget6);
 
 	//software reset
 	cmd_write_register_6(ctx, ADDR_BROADCAST, 1,0,

@@ -4945,7 +4945,7 @@ static void *submit_work_thread(void *userdata)
 		}
 		resubmit = true;
 		if (stale_work(work, true)) {
-			applog(LOG_NOTICE, "Pool %d share became stale while retrying submit, discarding", pool->pool_no);
+			applog(LOG_ERR, "Pool %d share became stale while retrying submit, discarding", pool->pool_no);
 
 			mutex_lock(&stats_lock);
 			total_stale++;
@@ -7172,18 +7172,41 @@ static void *stratum_sthread(void *userdata)
 		sshare->id = swork_id++;
 		mutex_unlock(&sshare_lock);
 
-		if (pool->vmask) {
-			snprintf(s, sizeof(s),
-				 "{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
-				pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, pool->vmask_002[work->micro_job_id], sshare->id);
-		} else {
-			snprintf(s, sizeof(s),
-				"{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
-				pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, sshare->id);
-		}
+		#ifdef USE_U8
+			uint8_t version[12]={0};
+			uint32_t *pversion = (uint32_t *)work->data;
+			snprintf(version, 9, "%08x", swab32(*pversion));
+		
+			if (pool->vmask) {
+				snprintf(s, sizeof(s),
+					 "{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
+					pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, version,pool->vmask_002[work->micro_job_id], sshare->id);
+			} else {
+				snprintf(s, sizeof(s),
+					"{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
+					pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, version,sshare->id);
+			}
+		#else
+			if (pool->vmask) {
+				snprintf(s, sizeof(s),
+					 "{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
+					pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, pool->vmask_002[work->micro_job_id], sshare->id);
+			} else {
+				snprintf(s, sizeof(s),
+					"{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
+					pool->rpc_user, work->job_id, nonce2hex, work->ntime, noncehex, sshare->id);
+			}
+		#endif
+		
 
 		applog(LOG_INFO, "Submitting share %08lx to pool %d",
 					(long unsigned int)htole32(hash32[6]), pool->pool_no);
+
+		#if 1 //debug
+			applog(LOG_ERR, "submit:%s", s);
+			//tq_freeze(pool->stratum_q);
+			//return NULL;
+		#endif
 
 		/* Try resubmitting for up to 2 minutes if we fail to submit
 		 * once and the stratum pool nonce1 still matches suggesting
@@ -8064,18 +8087,18 @@ static void submit_work_async(struct work *work)
 		pool->diff_accepted += work->work_difficulty;
 		mutex_unlock(&stats_lock);
 
-		applog(LOG_NOTICE, "Accepted %s %d benchmark share nonce %08x",
+		applog(LOG_ERR, "Accepted %s %d benchmark share nonce %08x",
 		       cgpu->drv->name, cgpu->device_id, *(uint32_t *)(work->data + 64 + 12));
 		return;
 	}
 
 	if (stale_work(work, true)) {
 		if (opt_submit_stale)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as user requested", pool->pool_no);
+			applog(LOG_ERR, "Pool %d stale share detected, submitting as user requested", pool->pool_no);
 		else if (pool->submit_old)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as pool requested", pool->pool_no);
+			applog(LOG_ERR, "Pool %d stale share detected, submitting as pool requested", pool->pool_no);
 		else {
-			applog(LOG_NOTICE, "Pool %d stale share detected, discarding", pool->pool_no);
+			applog(LOG_ERR, "Pool %d stale share detected, discarding", pool->pool_no);
 			sharelog("discard", work);
 
 			mutex_lock(&stats_lock);
@@ -8092,13 +8115,13 @@ static void submit_work_async(struct work *work)
 	}
 
 	if (work->stratum) {
-		applog(LOG_DEBUG, "Pushing pool %d work to stratum queue", pool->pool_no);
+		applog(LOG_ERR, "Pushing pool %d work to stratum queue", pool->pool_no);
 		if (unlikely(!pool->stratum_q || !tq_push(pool->stratum_q, work))) {
-			applog(LOG_DEBUG, "Discarding work from removed pool");
+			applog(LOG_ERR, "Discarding work from removed pool");
 			free_work(work);
 		}
 	} else {
-		applog(LOG_DEBUG, "Pushing submit work to work thread");
+		applog(LOG_ERR, "Pushing submit work to work thread");
 		if (unlikely(pthread_create(&submit_thread, NULL, submit_work_thread, (void *)work)))
 			quit(1, "Failed to create submit_work_thread");
 	}
@@ -8193,7 +8216,7 @@ bool submit_tested_work(struct thr_info *thr, struct work *work)
 	struct work *work_out;
 	update_work_stats(thr, work);
 
-	#if 1
+	#if 0
 		uint32_t *p = work->hash;
 		applog(LOG_ERR, "x work->hash:");
 		for (int i=0; i <8 ; i++)
@@ -8208,7 +8231,7 @@ bool submit_tested_work(struct thr_info *thr, struct work *work)
 	#endif
 
 	if (!fulltest(work->hash, work->target)) {
-		applog(LOG_INFO, "%s %d: Share above target", thr->cgpu->drv->name,
+		applog(LOG_ERR, "%s %d: Share above target", thr->cgpu->drv->name,
 		       thr->cgpu->device_id);
 		return false;
 	}
@@ -8224,7 +8247,7 @@ static bool new_nonce(struct thr_info *thr, uint32_t nonce)
 	struct cgpu_info *cgpu = thr->cgpu;
 
 	if (unlikely(cgpu->last_nonce == nonce)) {
-		applog(LOG_DEBUG, "%s %d duplicate share detected as HW error",
+		applog(LOG_ERR, "%s %d duplicate share detected as HW error",
 		       cgpu->drv->name, cgpu->device_id);
 		return false;
 	}

@@ -75,9 +75,8 @@ struct u8_chain
 	bool need_flush_job;
 	bool need_reset_board;
 	
-	uint32_t current_HTarget7;
 	uint32_t current_HTarget6;
-
+ 
 	pthread_mutex_t lock;
 	
 	struct u8_chip *chips;
