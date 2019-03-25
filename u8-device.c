@@ -785,7 +785,7 @@ void config_hash_board(struct u8_chain *achain)
 	int i, j;
 
 	//cmd_write_register_1(ctx, ADDR_BROADCAST, 200,200,200,200);
-	cmd_write_register_3(ctx, ADDR_BROADCAST, 0, 0);
+	cmd_write_register_3(ctx, ADDR_BROADCAST, 0, 1);
 #if 0	
 	cmd_write_register_4(ctx, ADDR_BROADCAST, 0xffffffff);
 	cmd_write_register_2(ctx, ADDR_BROADCAST, 0, 1, 0);

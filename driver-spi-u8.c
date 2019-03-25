@@ -191,6 +191,14 @@ static uint8_t  * create_job( struct work *work, uint8_t chip_id)
 	memcpy(work->data, dat, 20*4);
 	memcpy(work->midstate, mid, 8*4);
 	memcpy(work->midstate1, mid, 8*4);
+
+	work->save_ntime = *((uint32_t *)(work->data+68));
+
+		free(work->ntime);
+		char str_ntime[12]={0};
+		snprintf(str_ntime, 9, "%08x", swab32(work->save_ntime));
+
+		work->ntime = strdup(str_ntime);
 	
 	#endif
 	
@@ -345,7 +353,7 @@ static int64_t u8_scanwork(struct thr_info *thr)
 
 	mutex_lock(&achain->lock);
 
-	if (cunt>10) sleep(1000);
+	if (cunt>3) sleep(1000);
 
 	for (i=0; i<2; i++)
 	{
@@ -381,18 +389,45 @@ static int64_t u8_scanwork(struct thr_info *thr)
 
 		uint32_t *pnt = (uint32_t *)(work->data+68);
 
-		applog(LOG_ERR, "old ntime = 0x%08x, str=%s", work->save_ntime, work->ntime);
+		#if 1
+			uint32_t *pp = work->data;
 
-		#if 0
+			applog(LOG_ERR, "data before:");
+			for (int i=0; i<20; i++)
+			{
+				printf("%08x ", pp[i]);
+				if ((i+1)%8 == 0)printf("\n");
+			}
+			printf("\n");
+		#endif
+
+		applog(LOG_ERR, "save ntime = 0x%08x,pntime=%08x, str=%s", 
+					work->save_ntime, *pnt,  work->ntime);
+
+		#if 1
 		free(work->ntime);
-		new_ntime = work->save_ntime+chip_ntime;
-		snprintf(str_ntime, 9, "%08x", new_ntime);
+		new_ntime = swab32(swab32(work->save_ntime)+chip_ntime);
+		snprintf(str_ntime, 9, "%08x", swab32(new_ntime));
+
+		applog(LOG_ERR, "o_time=%08x, chip_ntime=%02x", swab32(work->save_ntime), chip_ntime);
+		applog(LOG_ERR, "o_time");
 
 		work->ntime = strdup(str_ntime);
 		*pnt = new_ntime;
 		#endif
 
-		applog(LOG_ERR, "new ntime = 0x%08x, str=%s", *pnt, work->ntime);
+		applog(LOG_ERR, "save ntime = 0x%08x,pntime=%08x, str=%s", 
+					work->save_ntime, *pnt,  work->ntime);
+		#if 1
+			 pp = work->data;
+			applog(LOG_ERR, "data after:");
+			for (int i=0; i<20; i++)
+			{
+				printf("%08x ", pp[i]);
+				if ((i+1)%8 == 0)printf("\n");
+			}
+			printf("\n");
+		#endif
 
 		#if 1
 		if (midstat_id)
