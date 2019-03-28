@@ -3,7 +3,7 @@
 
  void flush_spi(struct spi_ctx *ctx)
 {
-	uint8_t buffer[ASIC_CHIP_NUM*4] = {0};
+	uint8_t buffer[ASIC_CHIP_NUM*4+4] = {0};
 	spi_send_data(ctx, buffer, ASIC_CHIP_NUM*4);
 }
 
@@ -142,6 +142,7 @@ bool cmd_read_result(struct u8_chain *achain, uint8_t chip_id, uint8_t *res)
 
 }
 
+//len= cmd(2B)+data
 bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t *buff, int len)
 {
 	int ret1, ret2;
@@ -181,7 +182,7 @@ bool spi_poll_result(struct spi_ctx *ctx, uint8_t cmd, uint8_t chip_id, uint8_t 
 				
 			}while(index < len);
 
-			memcpy(buff, spi_rx, len);
+			memcpy(buff, spi_rx, len+2);
 			return true;
 		}
 		cgsleep_us(2);
@@ -333,6 +334,13 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 22);	
+	
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -409,6 +417,13 @@ void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, 
 	spi_tx[21] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 22);	
+	
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -491,16 +506,15 @@ bool cmd_write_register_2(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spdEn, u
 
 	spi_send_data(ctx, spi_tx, 22);
 
-	if (chip_id == ADDR_BROADCAST)
-	{
-		flush_spi(ctx);
-	}
-	else
+
+	if (spi_tx[0] != 0x00)
 	{
 		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
-		applog(LOG_ERR, "chip_%d, bank2:%02x %02x %02x %02x",
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
 					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
 	}
+	flush_spi(ctx);
+	
 }
 
 bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn, uint8_t RollTimeEn)
@@ -540,6 +554,13 @@ bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn, u
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -582,16 +603,13 @@ bool cmd_write_register_4(struct spi_ctx *ctx, uint8_t chip_id, uint32_t nonceTa
 
 	spi_send_data(ctx, spi_tx, 14);
 
-	if (chip_id == ADDR_BROADCAST)
-	{
-		flush_spi(ctx);
-	}
-	else
+	if (spi_tx[0] != 0x00)
 	{
 		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
-		applog(LOG_ERR, "chip_%d, bank4:%02x %02x %02x %02x",
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
 					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
 	}
+	flush_spi(ctx);
 
 }
 
@@ -621,6 +639,13 @@ bool cmd_write_register_5(struct spi_ctx *ctx, uint8_t chip_id, uint8_t spi_div)
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -663,6 +688,13 @@ bool cmd_write_register_6(struct spi_ctx *ctx, uint8_t chip_id, uint8_t restProt
 	spi_tx[13] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 14);
+
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -687,6 +719,13 @@ bool cmd_write_register_7(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[69] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 70);
+
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
@@ -711,6 +750,13 @@ bool cmd_write_register_8(struct spi_ctx *ctx, uint8_t chip_id)
 	spi_tx[69] = (uint8_t)((crc >> 8) & 0xff);
 
 	spi_send_data(ctx, spi_tx, 70);
+
+	if (spi_tx[0] != 0x00)
+	{
+		spi_poll_result(ctx, spi_tx[1], chip_id, spi_rx, 2);
+		applog(LOG_ERR, "chip_%d, bank2 return:%02x %02x %02x %02x",
+					chip_id, spi_rx[0],spi_rx[1],spi_rx[2],spi_rx[3] );
+	}
 	flush_spi(ctx);
 }
 
