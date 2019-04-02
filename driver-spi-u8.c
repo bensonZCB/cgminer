@@ -171,7 +171,7 @@ static uint8_t  * create_job( struct work *work, uint8_t chip_id)
 	uint32_t *pnonce = (uint32_t*)(jobinfo+80);
 
 	#define BOOST_EN   0x01
-	#define START_NONCE	0x00
+	#define START_NONCE	(0x032ac98f^0x00008700)
 	
 
  #if 0 //for debug
