@@ -537,7 +537,7 @@ bool cmd_write_register_3(struct spi_ctx *ctx, uint8_t chip_id, uint8_t crcEn, u
 	bankVal[0] = (bankVal[0]&0x0f)|(crcEn<<4);
 
 	RollTimeEn &=0x01;
-	bankVal[3] = (bankVal[3]&0x01)|RollTimeEn;
+	bankVal[3] = (bankVal[3]&0xf0)|RollTimeEn;
 
 	RollTimeVal &= 0x00ffffff;
 	bankVal[5] = (RollTimeVal>>16);
