@@ -193,9 +193,6 @@ static uint8_t  * create_job( struct work *work, uint8_t chip_id)
 	memcpy(work->midstate, mid, 8*4);
 	memcpy(work->midstate1, mid, 8*4);
 
-	//make diff
-	work->midstate1[0] = 0x44;
-
 	work->save_ntime = *((uint32_t *)(work->data+68));
 
 		free(work->ntime);

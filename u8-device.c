@@ -281,9 +281,13 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 
 	memcpy(spi_tx+4, regpll3, 4);
 	memcpy(spi_tx+8, regpll2, 4);
-	memcpy(spi_tx+16, regpll1, 4);
-	memcpy(spi_tx+24, regpll0, 4);
+	memcpy(spi_tx+12, regpll1, 4);
+	memcpy(spi_tx+16, regpll0, 4);
 
+	applog(LOG_ERR, "bank1 set pll:");
+	for (int i=0; i<20; i++)
+		printf("%02x ", spi_tx[i]);
+	printf("\n");
 
 	swap_data(spi_tx, 20);
 	crc = CRC16(spi_tx, 20);
@@ -295,15 +299,25 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	flush_spi(ctx);
 	
 	/***********step 2 set power down bit***********/
-	regpll3[3] &= 0xf9;
-	regpll3[2] &= 0xf9;
-	regpll3[1] &= 0xf9;
-	regpll3[0] &= 0xf9;
+	spi_tx[0] = CMD_WRITE_REG;
+	spi_tx[1] = chip_id;
+	spi_tx[2] = 0x00;
+	spi_tx[3] = 0x01;
+	
+	regpll3[3] &= 0xf5;
+	regpll2[3] &= 0xf5;
+	regpll1[3] &= 0xf5;
+	regpll0[3] &= 0xf5;
 
 	memcpy(spi_tx+4, regpll3, 4);
 	memcpy(spi_tx+8, regpll2, 4);
-	memcpy(spi_tx+16, regpll1, 4);
-	memcpy(spi_tx+24, regpll0, 4);
+	memcpy(spi_tx+12, regpll1, 4);
+	memcpy(spi_tx+16, regpll0, 4);
+
+	applog(LOG_ERR, "bank1 set power down:");
+	for (int i=0; i<20; i++)
+		printf("%02x ", spi_tx[i]);
+	printf("\n");
 
 
 	swap_data(spi_tx, 20);
@@ -316,6 +330,11 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	flush_spi(ctx);
 
 	/***********step 3 set pll gate bit*************/
+	spi_tx[0] = CMD_WRITE_REG;
+	spi_tx[1] = chip_id;
+	spi_tx[2] = 0x00;
+	spi_tx[3] = 0x01;
+	
 	regpll3[0] |= 0x80;
 	regpll2[0] |= 0x80;
 	regpll1[0] |= 0x80;
@@ -323,9 +342,13 @@ bool cmd_write_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, u
 	
 	memcpy(spi_tx+4, regpll3, 4);
 	memcpy(spi_tx+8, regpll2, 4);
-	memcpy(spi_tx+16, regpll1, 4);
-	memcpy(spi_tx+24, regpll0, 4);
+	memcpy(spi_tx+12, regpll1, 4);
+	memcpy(spi_tx+16, regpll0, 4);
 
+	applog(LOG_ERR, "bank1 set gate:");
+	for (int i=0; i<20; i++)
+		printf("%02x ", spi_tx[i]);
+	printf("\n");
 
 	swap_data(spi_tx, 20);
 	crc = CRC16(spi_tx, 20);
@@ -393,10 +416,10 @@ void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, 
 	regpll0[0] = (regpll0[0]&0xc0)|(RefDiv&0x3f);
 	
 	/***********step 2 set power down bit***********/
-	regpll3[3] &= 0xf9;
-	regpll3[2] &= 0xf9;
-	regpll3[1] &= 0xf9;
-	regpll3[0] &= 0xf9;
+	regpll3[3] &= 0xf5;
+	regpll2[3] &= 0xf5;
+	regpll1[3] &= 0xf5;
+	regpll0[3] &= 0xf5;
 
 	/***********step 3 set pll gate bit*************/
 	regpll3[0] |= 0x80;
@@ -406,8 +429,8 @@ void cmd_update_register_1(struct spi_ctx *ctx, uint8_t chip_id, uint32_t pll0, 
 	
 	memcpy(spi_tx+4, regpll3, 4);
 	memcpy(spi_tx+8, regpll2, 4);
-	memcpy(spi_tx+16, regpll1, 4);
-	memcpy(spi_tx+24, regpll0, 4);
+	memcpy(spi_tx+12, regpll1, 4);
+	memcpy(spi_tx+16, regpll0, 4);
 
 
 	swap_data(spi_tx, 20);
