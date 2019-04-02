@@ -853,23 +853,17 @@ void config_hash_board(struct u8_chain *achain)
 	struct spi_ctx *ctx  = achain->spi_ctx;
 	int i, j;
 
-	//cmd_write_register_1(ctx, ADDR_BROADCAST, 200,200,200,200);
+	cmd_write_register_1(ctx, ADDR_BROADCAST, 200,200,200,200);
 	cmd_write_register_3(ctx, ADDR_BROADCAST, 0, 1);
-#if 0	
-	cmd_write_register_4(ctx, ADDR_BROADCAST, 0xffffffff);
-	cmd_write_register_2(ctx, ADDR_BROADCAST, 0, 1, 0);
-#else
-	cmd_write_register_2(ctx, 1, 0, 1, 2);
-	cmd_write_register_2(ctx, 2, 0, 1, 2);
-	cmd_write_register_4(ctx, 0x01, achain->current_HTarget6);
-	cmd_write_register_4(ctx, 0x02, achain->current_HTarget6);
+
+	cmd_write_register_2(ctx, ADDR_BROADCAST, 0, 1, 2);
+	cmd_write_register_4(ctx, ADDR_BROADCAST, achain->current_HTarget6);
 
 	//software reset
 	cmd_write_register_6(ctx, ADDR_BROADCAST, 1,0,
 								1, 0xff,  0);
 	cmd_write_register_6(ctx, ADDR_BROADCAST, 0,1,
 								1, 0xff,  0);
-#endif	
 	
 	//cmd_write_register_5(ctx, ADDR_BROADCAST, spiDiv);
 	//cmd_write_register_7(ctx, ADDR_BROADCAST);
