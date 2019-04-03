@@ -4746,6 +4746,11 @@ void app_restart(void)
 
 static void sighandler(int __maybe_unused sig)
 {
+	stu_board_set_reset_low(0);
+	stu_board_set_reset_low(1);
+	stu_board_set_reset_low(2);
+	stu_board_set_reset_low(3);
+
 	/* Restore signal handlers so we can still quit if kill_work fails */
 	sigaction(SIGTERM, &termhandler, NULL);
 	sigaction(SIGINT, &inthandler, NULL);
