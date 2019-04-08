@@ -167,7 +167,7 @@ cgminer_SOURCES += driver-bab.c
 endif
 
 if HAS_U8
-cgminer_SOURCES += driver-spi-u8.c u8-device.c u8-device.h 
+cgminer_SOURCES += driver-spi-u8.c u8-device.c u8-device.h u8-pll.c
 cgminer_SOURCES += spi-context.c spi-context.h
 endif
 
